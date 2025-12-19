@@ -6,129 +6,125 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 class FixedLengthParserTest {
 
 	@Test
-	void testParseValidFile() throws Exception {
-		Path schemaFile = Files.createTempFile("schema", ".txt");
-		Files.writeString(schemaFile, "name 1 20\n" + "gender 21 21\n" + "age 22 25");
-
-		Path dataFile = Files.createTempFile("file", ".txt");
-		Files.writeString(dataFile, "John Doe            M 25 \n" + "Jane Smith          F 30 ");
-
-		FixedLengthParser parser = new FixedLengthParser(schemaFile.toString());
-		List<Record> records = parser.parseFile(dataFile.toString());
-
-		Assertions.assertEquals(2, records.size()); //both line successfully recorded
-
-		Record r1 = records.get(0);
-		Assertions.assertEquals("John Doe", r1.getValues().get("name"));
-		Assertions.assertEquals("M", r1.getValues().get("gender"));
-		Assertions.assertEquals("25", r1.getValues().get("age"));
+	void testParseValidLine() throws Exception {
+		// GIVEN a schema with 3 fixed length fields - name, gender, age
+		// AND a parser program to initialized the schema
+		List<SchemaField> schema = List.of(
+				new SchemaField("name", 1, 20),
+				new SchemaField("gender", 21, 21),
+				new SchemaField("age", 22, 25)
+		);
 		
-		Record r2 = records.get(1);
-		Assertions.assertEquals("Jane Smith", r2.getValues().get("name"));
-		Assertions.assertEquals("F", r2.getValues().get("gender"));
-		Assertions.assertEquals("30", r2.getValues().get("age"));
+		FixedLengthParser parser = new FixedLengthParser(schema);
+
+		// WHEN a valid fixed length line is passed into the parser program
+		Record record = parser.parseLine("John Doe            M 25 ");
+
+		// THEN parser program should return record containing the line
+		// AND all fields should be correctly extracted
+		assertNotNull(record);
+		assertEquals("John Doe", record.getValues().get("name"));
+		assertEquals("M", record.getValues().get("gender"));
+		assertEquals("25", record.getValues().get("age"));
 	}
 
 	@Test
 	void testSkipBlankFields() throws Exception {
-		Path schemaFile = Files.createTempFile("schema", ".txt");
-		Files.writeString(schemaFile, "name 1 20\n" + "gender 21 21\n" + "age 22 25");
-
-		Path dataFile = Files.createTempFile("file", ".txt");
-		Files.writeString(dataFile, "John Doe            M 25 \n" + 
-		                            "Jane Smith               " // having blank field and will be skipped
+		// GIVEN a schema with 3 fixed length fields - name, gender, age
+		// AND a parser program to initialized the schema
+		List<SchemaField> schema = List.of(
+				new SchemaField("name", 1, 20),
+				new SchemaField("gender", 21, 21),
+				new SchemaField("age", 22, 25)
 		);
+		
+		FixedLengthParser parser = new FixedLengthParser(schema);
 
-		FixedLengthParser parser = new FixedLengthParser(schemaFile.toString());
-		List<Record> records = parser.parseFile(dataFile.toString());
+		// WHEN a valid fixed length line with certain blank field(s) is passed into the parser program
+		Record record = parser.parseLine("Jane Smith               ");
 
-		Assertions.assertEquals(1, records.size()); // only 1 line successfully recorded
-
-		Record r1 = records.get(0);
-		Assertions.assertEquals("John Doe", r1.getValues().get("name"));
-		Assertions.assertEquals("M", r1.getValues().get("gender"));
-		Assertions.assertEquals("25", r1.getValues().get("age"));
+		// THEN parser program should not return any record as the line is skipped
+		assertNull(record);
 	}
-	
+
 	@Test
 	void testSkipShortLine() throws Exception {
-		Path schemaFile = Files.createTempFile("schema", ".txt");
-		Files.writeString(schemaFile, "name 1 20\n" + "gender 21 21\n" + "age 22 25");
-
-		Path dataFile = Files.createTempFile("file", ".txt");
-		Files.writeString(dataFile, "John Doe     M 25\n" + // short line will be skipped
-		                            "Jane Smith          F 30 " 
+		// GIVEN a schema with 3 fixed length fields - name, gender, age
+		// AND a parser program to initialized the schema
+		List<SchemaField> schema = List.of(
+				new SchemaField("name", 1, 20),
+				new SchemaField("gender", 21, 21),
+				new SchemaField("age", 22, 25)
 		);
+		
+		FixedLengthParser parser = new FixedLengthParser(schema);
 
-		FixedLengthParser parser = new FixedLengthParser(schemaFile.toString());
-		List<Record> records = parser.parseFile(dataFile.toString());
+		// WHEN a line shorter than the expected schema length is passed into the parser program
+		Record record = parser.parseLine("John Doe     M 25");
 
-		Assertions.assertEquals(1, records.size()); // only 1 line successfully recorded
-
-		Record r1 = records.get(0);
-		Assertions.assertEquals("Jane Smith", r1.getValues().get("name"));
-		Assertions.assertEquals("F", r1.getValues().get("gender"));
-		Assertions.assertEquals("30", r1.getValues().get("age"));
+		// THEN parser program should not return any record as the line is skipped
+		assertNull(record);
 	}
-	
+
 	@Test
 	void testDynamicFieldsWithoutCodeChange() throws Exception {
-		Path schemaFile = Files.createTempFile("schema", ".txt");
-		Files.writeString(schemaFile, "name 1 20\n" + 
-		                              "gender 21 21\n" + 
-				                      "age 22 25\n" + 
-		                              "phone 26 37" //new field added into schema
+		// GIVEN a extended schema with 4 fixed length fields - name, gender, age, phone
+		// AND a parser program to initialized the schema
+		List<SchemaField> schema = List.of(
+				new SchemaField("name", 1, 20),
+				new SchemaField("gender", 21, 21),
+				new SchemaField("age", 22, 25),
+				new SchemaField("phone", 26, 37)
 		);
-
-		Path dataFile = Files.createTempFile("file", ".txt");
-		Files.writeString(dataFile, "John Doe            M 25 012-3456789 \n" + 
-		                            "Jane Smith          F 30 011-2345678 "
-		);
-
-		FixedLengthParser parser = new FixedLengthParser(schemaFile.toString());
-		List<Record> records = parser.parseFile(dataFile.toString());
-
-		Assertions.assertEquals(2, records.size()); //both line successfully recorded
-
-		Record r1 = records.get(0);
-		Assertions.assertEquals("John Doe", r1.getValues().get("name"));
-		Assertions.assertEquals("M", r1.getValues().get("gender"));
-		Assertions.assertEquals("25", r1.getValues().get("age"));
-		Assertions.assertEquals("012-3456789", r1.getValues().get("phone"));
 		
-		Record r2 = records.get(1);
-		Assertions.assertEquals("Jane Smith", r2.getValues().get("name"));
-		Assertions.assertEquals("F", r2.getValues().get("gender"));
-		Assertions.assertEquals("30", r2.getValues().get("age"));
-		Assertions.assertEquals("011-2345678", r2.getValues().get("phone"));
+		FixedLengthParser parser = new FixedLengthParser(schema);
+
+		// WHEN a valid fixed length line containing the additional field is passed into the parser program
+		Record record = parser.parseLine("John Doe            M 25 012-3456789 ");
+
+		// THEN parser program should return record containing the line
+		// AND all fields should be correctly extracted
+		assertNotNull(record);
+		assertEquals("John Doe", record.getValues().get("name"));
+		assertEquals("M", record.getValues().get("gender"));
+		assertEquals("25", record.getValues().get("age"));
+		assertEquals("012-3456789", record.getValues().get("phone"));
 	}
-	
+
 	@Test
 	void testLargeFilePerformance() throws Exception {
+		// GIVEN a schema with fixed length fields loaded from a text file
+		// AND a parser program to initialized the schema
+		// AND a large data file containing many valid fixed length lines
 		Path schemaFile = Files.createTempFile("schema", ".txt");
-		Files.writeString(schemaFile, "name 1 20\n" + "gender 21 21\n" + "age 22 25");
+		Files.writeString(schemaFile, "name 1 20\n" + "gender 21 21\n" + "age 22 25\n");
+
+		List<SchemaField> schema = SchemaLoader.loadFromTxt(schemaFile.toString());
+		FixedLengthParser parser = new FixedLengthParser(schema);
 
 		Path dataFile = Files.createTempFile("file", ".txt");
 		final int LINE_COUNT = 200000;
-		try(var writer = Files.newBufferedWriter(dataFile)){
-			for(int i = 0;i < LINE_COUNT;i++) {
-				writer.write("John Doe            M 25 \n");	
+
+		try (var writer = Files.newBufferedWriter(dataFile)) {
+			for (int i = 0; i < LINE_COUNT; i++) {
+				writer.write("John Doe            M 25 \n");
 			}
 		}
 
-		FixedLengthParser parser = new FixedLengthParser(schemaFile.toString());
-		
+		// WHEN the large file is passed into the parser program
+		// AND the start and elapsed time is recorded
 		long startTime = System.currentTimeMillis();
 		List<Record> records = parser.parseFile(dataFile.toString());
-		long elapseTime = System.currentTimeMillis() - startTime;
+		long elapsedTime = System.currentTimeMillis() - startTime;
 
-		Assertions.assertEquals(LINE_COUNT, records.size()); //all line successfully recorded
-		Assertions.assertTrue(elapseTime < 5000, "Parser took too long"); //check parser within 5 seconds
+		// THEN parser program should return record containing all the lines
+		// AND the parsing should complete within an acceptable time limit
+		assertEquals(LINE_COUNT, records.size());
+		assertTrue(elapsedTime < 5000, "Parser took too long");
 	}
 }
